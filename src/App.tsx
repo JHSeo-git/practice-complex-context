@@ -22,7 +22,7 @@ function Box({ children, subTitle, title }: BoxProps) {
 
 function App() {
   return (
-    <div className="max-w-7xl mx-auto p-10 grid grid-cols-1 gap-20 sm:grid-cols-2">
+    <div className="max-w-7xl mx-auto p-10 grid grid-cols-1 gap-x-10 gap-y-40 sm:grid-cols-2">
       <Box title="single Opener component" subTitle="using normal React.createContext">
         <Opener.Root>
           <Opener.Trigger>Opener 👍</Opener.Trigger>
