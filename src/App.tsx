@@ -22,7 +22,7 @@ function Box({ children, subTitle, title }: BoxProps) {
 
 function App() {
   return (
-    <div className="max-w-7xl mx-auto p-10 grid grid-cols-2 gap-20">
+    <div className="max-w-7xl mx-auto p-10 grid grid-cols-1 gap-20 sm:grid-cols-2">
       <Box title="single Opener component" subTitle="using normal React.createContext">
         <Opener.Root>
           <Opener.Trigger>Opener 👍</Opener.Trigger>
@@ -85,7 +85,7 @@ function App() {
               <div className="mt-4 flex flex-col gap-4">
                 <RadixAlertOpener.Trigger>Radix AlertOpener 👍</RadixAlertOpener.Trigger>
                 <RadixAlertOpener.Root>
-                  <RadixAlertOpener.Trigger>Inner Trigger</RadixAlertOpener.Trigger>
+                  <RadixAlertOpener.Trigger>Inner Radis AlertOpener 👍</RadixAlertOpener.Trigger>
                   <RadixAlertOpener.Content className="mt-4 whitespace-nowrap">
                     This is inner of inner alert-content
                     <RadixAlertOpener.ContentSize />
