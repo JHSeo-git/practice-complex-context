@@ -25,20 +25,20 @@ interface OpenerContextValue {
 const OpenerContext = React.createContext<OpenerContextValue | null>(null);
 
 // Opener
-function Opener({ className, children }: OpenerProps) {
+function Opener({ children }: OpenerProps) {
   const [open, setOpen] = React.useState(false);
 
   return (
     <OpenerContext.Provider value={{ open, setOpen }}>
-      <div className={cn('relative', className)}>{children}</div>
+      <div>{children}</div>
     </OpenerContext.Provider>
   );
 }
 ```
 
-`<Opener />` 컴포넌트는 `children`(consumer)에서 `OpenerContext`를 사용할 수 있습니다.
+Compound 컴포넌트 형태로 `<OpenerTrigger />`와 `<OpenerContent />` 컴포넌트를 만들어 보겠습니다.
 
-Compound 컴포넌트 형태로 제공하는 `<OpenerTrigger />`와 `<OpenerContent />`도 제공됩니다.
+`<OpenerTrigger />`와 `<OpenerContent />` 컴포넌트(consumer)에서는 `React.useContext`를 이용하여 `OpenerContext`를 사용할 수 있습니다.
 
 ```tsx
 function OpenerTrigger({ children }: OpenerProps) {
@@ -73,7 +73,7 @@ function App() {
 
 그러나 만약 여러 중첩된 컴포넌트에서 `<Opener />`를 사용하게 된다면, `<Opener />` 컴포넌트를 사용하는 컴포넌트의 Context가 `<Opener />` 컴포넌트의 Context를 덮어쓰게 됩니다.
 
-**[정확하게 consumer는 가장 가까운 Provider의 Context를 가져오게 되는데, 중첩되고 복잡한 컴포넌트 트리에서는 의도하지 않은 Context를 가져오게 될 수 있습니다.](https://beta.reactjs.org/reference/react/useContext#passing-data-deeply-into-the-tree)**
+**[Consumer는 가장 가까운 Provider의 Context를 가져오게 되는데, 중첩되고 복잡한 컴포넌트 트리에서는 의도하지 않은 Context를 가져오게 될 수 있습니다.](https://beta.reactjs.org/reference/react/useContext#passing-data-deeply-into-the-tree)**
 
 좀 더 구체적으로 예를 들어보겠습니다.
 
@@ -137,13 +137,93 @@ function App() {
 ![wrong-case-2](./docs/images/wrong-case-2.png)
 
 `AlertOpenerTrigger` 위치를 코드에서 보게 되면 가장 가까운 Context Provider는
-`<AlertOpener />`에서 제공되는 Provider가 아닌 `<Opener />`에서 제공되는 Provider입니다.
+`<AlertOpener />`에서 사용된 Provider가 아닌 `<Opener />`에서 제공되는 Provider입니다.
 
-위 `consumer는 가장 가까운 Provider의 Context를 가져온다`는 원칙에 따라 `AlertOpenerTrigger`는 `<Opener />`에서 제공되는 Context를 가져오게 됩니다.
+코드를 풀어서 보면 조금 더 이해하기 쉬울 것 같습니다.
+
+```tsx
+function App() {
+  return (
+    <OpenerContext.Provider>
+      {/* AlertOpener의 Provider */}
+      <div>
+        <OpenerContext.Provider>
+          {/* Opener의 Provider */}
+          <div>
+            <button>Opener Open</button> {/* Opener의 Trigger */}
+            <div>
+              {/* Opener의 Content */}
+              Opener Content
+              <button>AlertOpener Open</button> {/* AlertOpener의 Trigger */}
+              <div>AlertOpener Content</div> {/* AlertOpener의 Content */}
+            </div>
+          </div>
+        </OpenerContext.Provider>
+      </div>
+    </OpenerContext.Provider>
+  );
+}
+```
+
+위에서 말한 `consumer는 가장 가까운 Provider의 Context를 가져온다`는 원칙에 따라 `<AlertOpenerTrigger />`는 가장 가까운 `<Opener />`에서 제공되는 Context를 가져오게 됩니다.
 따라서 `AlertOpenerTrigger`를 클릭하면 `AlertOpenerContent`가 렌더링되는 대신 `OpenerContent`가 닫히게 됩니다.
 
-이런 구조를 피해 코드를 작성할 수도 있지만, 이런 구조를 사용해야 하는 경우가 있을 수도 있습니다.
-그런 경우라면 어떻게 해야할까요?
+이런 구조를 사용해야 하는 경우라면 어떻게 해결을 해야할까요?
 
-radix-ui 코드를 통해 _중첩 동일 Scope Context내에서 의도한 Scope Context 가져오기_ 의 해결 방법 중 하나가 있어서 알아보았습니다.
-그 전에 _brute-force_ 방법을 먼저 접근해보았습니다.
+## solution 1. brute-force
+
+쉬운 접근법은 `<AlertOpener />`의 Context를 `<Opener />`의 Context로 덮어쓰는 것입니다.  
+즉, `<Opener />` 트리 상위에 동일 Context가 존재한다면 그 Context를 사용하도록 만드는 것입니다.
+
+```tsx
+interface OpenerContextValue {
+  open: boolean;
+  setOpen: React.Dispatch<React.SetStateAction<boolean>>;
+}
+
+const createOpenerContext = () => React.createContext<OpenerContextValue | null>(null);
+
+function Opener({ className, DefaultContext = createOpenerContext() }: OpenerProps) {
+  const [open, setOpen] = React.useState(false);
+
+  return (
+    <DefaultContext.Provider value={{ open, setOpen }}>
+      <div>{children}</div>
+    </DefaultContext.Provider>
+  );
+}
+```
+
+`<Opener />`는 props로 `DefaultContext`를 받습니다. 만약 `DefaultContext`가 존재한다면 그 Context를 사용하고, 존재하지 않는다면 그 때 `OpenerContext`를 만들어 사용하도록 했습니다.
+`<Opener />`를 사용하여 확장한 컴포넌트에서는 `createOpenerContext`를 이용하여 Context를 만들어 `DefaultContext`로 넘겨주면 됩니다.
+
+위 issue 예시를 해결하기 위해서 `<AlertOpener />`는 다음과 같은 코드가 나올 것입니다.
+
+```tsx
+const AlertOpenerContext = Opener.createOpenerContext();
+
+interface AlertOpenerProps extends React.ComponentProps<typeof Opener.Root> {}
+
+function AlertOpener(props: AlertOpenerProps) {
+  return <Opener.Root {...props} DefaultContext={AlertOpenerContext} />;
+}
+
+interface AlertOpenerTriggerProps extends React.ComponentProps<typeof Opener.Trigger> {}
+
+function AlertOpenerTrigger(props: AlertOpenerTriggerProps) {
+  return <Opener.Trigger {...props} DefaultContext={AlertOpenerContext} />;
+}
+
+interface AlertOpenerContentProps extends React.ComponentProps<typeof Opener.Content> {}
+
+function AlertOpenerContent(props: AlertOpenerContentProps) {
+  return <Opener.Content {...props} DefaultContext={AlertOpenerContext} />;
+}
+```
+
+이처럼 간단하게 얽힌 Context 문제는 해결할 순 있지만 복잡하게 중첩된 Context를 사용하는 경우에는 코드가 매우 복잡해질 것입니다.
+그래서 좀 더 나은 방법을 찾아보았습니다.
+
+## solution 2. Context Scope
+
+radix-ui에서는 이러한 _중첩 동일 Context내에서 의도한 Context 가져오기_ 의 해결방법으로 context scope를 사용하여 해결하고 있습니다.
