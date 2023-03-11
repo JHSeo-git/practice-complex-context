@@ -88,14 +88,14 @@ function createContextScope(scopeName: string, createContextScopeDeps: CreateSco
     const BaseContext = React.createContext<ContextValueType | undefined>(defaultContext);
 
     // defaultContext를 내부 배열에 추가하기 전에 현재 context length를 캡쳐합니다.
-    // `Provider`에서 가장 가까운(가장 최근에 추가된) context를 가져오기 위해서 사용합니다.
+    // createContext를 호출한 시점의 context index를 기억하기 위해
     const index = defaultContexts.length;
     defaultContexts = [...defaultContexts, defaultContext];
 
     /**
      * scope는 key가 `scopeName`이고 value는 generic으로 받은 타입을 가진 `React.Context`의 배열인 Record입니다.
      *
-     * scope에서 createContextScope param으로 받은 `scopeName`에 해당하는 `React.Context` 배열의 마지막에 해당하는 context를 찾습니다.
+     * scope에서 createContextScope param으로 받은 `scopeName`에 해당하는 `React.Context`를 찾습니다.
      * 만약 scope에 해당하는 context가 없다면 `BaseContext`(신규 생성된 context)를 사용합니다.
      *
      * scope에서 찾은(또는 신규 생성한) Context로 `Provider`를 생성합니다.
@@ -115,7 +115,7 @@ function createContextScope(scopeName: string, createContextScopeDeps: CreateSco
      * consumerName은 useContext를 사용할 때 내부에서 인식하는 이름입니다. 비정상적인 접근(context가 선언되지 않았거나 등)일 경우 에러 메시지에 사용됩니다.
      * scope는 key가 `scopeName`이고 value는 generic으로 받은 타입을 가진 `React.Context`의 배열인 Record입니다.
      *
-     * scope에서 createContextScope param으로 받은 `scopeName`에 해당하는 `React.Context` 배열의 마지막에 해당하는 context를 찾습니다.
+     * scope에서 createContextScope param으로 받은 `scopeName`에 해당하는 `React.Context`를 찾습니다.
      * 만약 scope에 해당하는 context가 없다면 `BaseContext`(신규 생성된 context)를 사용합니다.
      *
      * 해당 context로 `React.useContext`를 호출합니다.

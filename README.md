@@ -4,10 +4,10 @@ Practice for React context when using nested contexts.
 
 ## why
 
-최근에 UI 컴포넌트를 만드는 경험을 많이 했습니다. 주로 headless 컴포넌트 라이브러리를 가져와 개발을 많이 했었는데, 리액트 Context API를 사용하는 케이스가 많았습니다.
-Props Drilling을 피하고, 리액트 트리 내 Context를 공유하는 것이 더 효율적이라고 생각했기 때문일 것 같습니다. 리액트는 peer로 설정해두기에 별도 전역 상태 관리 라이브러리를 사용하지 않고도 리액트 Context API를 사용하면서 상태를 공유할 수 있기 때문이기도 했습니다.
+최근에 UI 컴포넌트를 만드는 경험을 많이 했습니다. 주로 headless 컴포넌트 라이브러리를 많이 사용했었는데, 리액트 Context API를 사용하는 케이스가 많았습니다.
+리액트 트리 내 Context를 공유해야 하는 경우가 많다 보니 Props Drilling을 피하고 별도 전역 상태 관리 라이브러리를 사용하지 않고도 상태를 공유할 수 있기 때문이기도 했습니다.
 
-그러던 와중에 복잡한 컴포넌트들을 개발하게 되면서 리액트 Context API를 사용하는 도중 예기치 않은 문제가 발생했습니다. 그 얘기와 관련되어 이 글과 Practice 코드를 작성하게 되었습니다.
+그러던 와중에 복잡한 컴포넌트들을 개발하게 되면서 리액트 Context API를 사용하는 도중 예기치 않은 문제가 발생했습니다. 그와 관련되어 이 글과 Practice 코드를 작성하게 되었습니다.
 
 ## issue
 
@@ -71,7 +71,7 @@ function App() {
 }
 ```
 
-그러나 만약 여러 중첩된 컴포넌트에서 `<Opener />`를 사용하게 된다면, `<Opener />` 컴포넌트를 사용하는 컴포넌트의 Context가 `<Opener />` 컴포넌트의 Context를 덮어쓰게 됩니다.
+그러나 만약 여러 중첩된 컴포넌트에서 `<Opener />`를 사용하게 된다면 어떨까요?
 
 **[Consumer는 가장 가까운 Provider의 Context를 가져오게 되는데, 중첩되고 복잡한 컴포넌트 트리에서는 의도하지 않은 Context를 가져오게 될 수 있습니다.](https://beta.reactjs.org/reference/react/useContext#passing-data-deeply-into-the-tree)**
 
@@ -165,12 +165,16 @@ function App() {
 }
 ```
 
+![wrong-case-diagram](./docs/images/wrong-case-diagram.png)
+
 위에서 말한 `consumer는 가장 가까운 Provider의 Context를 가져온다`는 원칙에 따라 `<AlertOpenerTrigger />`는 가장 가까운 `<Opener />`에서 제공되는 Context를 가져오게 됩니다.
 따라서 `AlertOpenerTrigger`를 클릭하면 `AlertOpenerContent`가 렌더링되는 대신 `OpenerContent`가 닫히게 됩니다.
 
 이런 구조를 사용해야 하는 경우라면 어떻게 해결을 해야할까요?
 
-## solution 1. brute-force
+## solution
+
+### 1. brute-force
 
 쉬운 접근법은 `<AlertOpener />`의 Context를 `<Opener />`의 Context로 덮어쓰는 것입니다.  
 즉, `<Opener />` 트리 상위에 동일 Context가 존재한다면 그 Context를 사용하도록 만드는 것입니다.
@@ -197,6 +201,8 @@ function Opener({ className, DefaultContext = createOpenerContext() }: OpenerPro
 `<Opener />`는 props로 `DefaultContext`를 받습니다. 만약 `DefaultContext`가 존재한다면 그 Context를 사용하고, 존재하지 않는다면 그 때 `OpenerContext`를 만들어 사용하도록 했습니다.
 `<Opener />`를 사용하여 확장한 컴포넌트에서는 `createOpenerContext`를 이용하여 Context를 만들어 `DefaultContext`로 넘겨주면 됩니다.
 
+![good-case-brute-force](./docs/images/good-case-brute-force.png)
+
 위 issue 예시를 해결하기 위해서 `<AlertOpener />`는 다음과 같은 코드가 나올 것입니다.
 
 ```tsx
@@ -221,9 +227,311 @@ function AlertOpenerContent(props: AlertOpenerContentProps) {
 }
 ```
 
-이처럼 간단하게 얽힌 Context 문제는 해결할 순 있지만 복잡하게 중첩된 Context를 사용하는 경우에는 코드가 매우 복잡해질 것입니다.
-그래서 좀 더 나은 방법을 찾아보았습니다.
+이처럼 간단한 Context 문제는 해결할 순 있지만 복잡하게 중첩된 Context를 사용하는 경우에는 코드가 매우 복잡해질 것입니다.
 
-## solution 2. Context Scope
+### 2. Context Scope
 
-radix-ui에서는 이러한 _중첩 동일 Context내에서 의도한 Context 가져오기_ 의 해결방법으로 context scope를 사용하여 해결하고 있습니다.
+> radix-ui
+
+radix-ui에서는 이러한 _중첩 동일 Context내에서 의도한 Context 가져오기_ 의 해결방법은 위 brute-force 방법과는 크게 다르지 않습니다.  
+다만, 복잡한 context 구조에도 쉽게 만들고 관리할 수 있도록 설계한 `createContextScope` hook을 만들어 사용합니다.
+
+#### Scope
+
+`createContextScope`에서 중요한 컨셉 중 하나는 `Scope`입니다.
+
+`Scope`는 scope내에서 함께 사용되는 context의 배열을 나타내는 타입입니다.
+
+`Scope`의 타입은 다음과 같습니다.
+
+```tsx
+type Scope<C = any> = { [scopeName: string]: React.Context<C>[] };
+
+// examples
+interface ContextValue {
+  ...
+}
+const scope: Scope<ContextValue> = {
+  Opener: [OpenerContext],
+};
+```
+
+#### createContextScope
+
+> https://github.com/radix-ui/primitives/blob/main/packages/react/context/src/createContext.tsx
+
+`createContextScope` hook의 인자와 반환 값을 살펴보면 다음과 같습니다.
+
+1. `createContextScope`는 `scopeName`과 `createContextScopeDeps`(사용되는 `createContextScope` 디팬던시 배열)을 인자로 받아 `createContext`와 `createScope`를 반환하는 Custom hook입니다.
+2. `createContext`는 `createContextScope`의 인자로 받은 scopeName을 기반으로 `scope`에서 Context를 찾아 `Provider`와 `useContext`를 반환하는 함수입니다.
+3. `createScope`는 `createContextScope`의 인자로 받은 scopeName을 기반으로 `scope`에서 Context를 찾아 인자로 받은 `createContextScopeDeps`와 compose하는 hook을 반환하는 함수입니다.
+
+```tsx
+function createContextScope(scopeName, createContextScopeDeps = []) {
+  let defaultContexts = [];
+
+  function createContext(rootComponentName: string, defaultContext?: ContextValueType) {
+    const BaseContext = React.createContext<ContextValueType | undefined>(defaultContext);
+
+    const index = defaultContexts.length;
+    defaultContexts = [...defaultContexts, defaultContext];
+
+    function Provider({ scope, children, ...props }) {
+      const Context = scope[scopeName][index] || BaseContext;
+      const value = React.useMemo(() => context, Object.values(context));
+
+      return <Context.Provider value={value}>{children}</Context.Provider>;
+    }
+
+    function useContext(consumerName: string, scope) {
+      const Context = scope[scopeName][index] || BaseContext;
+      const context = React.useContext(Context);
+
+      if (context) return context;
+      if (defaultContext !== undefined) return defaultContext;
+    }
+
+    return [Provider, useContext];
+  }
+
+  function createScope() {
+    const scopeContexts = defaultContexts.map((defaultContext) =>
+      React.createContext(defaultContext)
+    );
+    return function useScope(scope) {
+      const contexts = scope[scopeName] || scopeContexts;
+      return React.useMemo(
+        () => ({ [`__scope${scopeName}`]: { ...scope, [scopeName]: contexts } }),
+        [scope, contexts]
+      );
+    };
+  }
+
+  return [createContext, composeContextScopes(createScope, ...createContextScopeDeps)];
+}
+```
+
+`createContextScope` 내부에는 `defaultContexts`라는 배열 변수를 관리합니다. 이 배열은 `createContext`를 호출할 때마다 생성된 Context를 추가합니다.
+그리고 내부에서는 이 배열을 기반으로 동작하며 `createContext`와 scope를 반환합니다.
+
+---
+
+**createContextScope - createContext**
+
+> `createContextScope`의 인자로 받은 scopeName을 기반으로 `scope`에서 Context를 찾아 `Provider`와 `useContext`를 반환하는 함수입니다.
+
+```ts
+let defaultContexts: any[] = [];
+
+function createContext(defaultContext) {
+  const BaseContext = React.createContext<ContextValueType | undefined>(defaultContext);
+
+  const index = defaultContexts.length;
+  defaultContexts = [...defaultContexts, defaultContext];
+
+  function Provider({ scope, ...}) {
+    const Context = scope?.[scopeName][index] || BaseContext;
+
+    ...
+  }
+
+  function useContext(scope, ...) {
+    const Context = scope?.[scopeName][index] || BaseContext;
+
+    ...
+  }
+}
+```
+
+`createContext`는 인자로 `rootComponentName`과 `defaultContext`를 받습니다.  
+defaultContext가 있는 경우 해당 defaultContext를 사용합니다. defaultContext가 없다면 BaseContext(신규 생성)를 사용합니다.
+생성된 context(`defaultContext` 또는 `BaseContext`)는 `defaultContexts`(배열)에 추가됩니다.
+
+`createContext`는 `Provider`와 `useContext`를 반환하는데
+`Provider`는 인자로 받은 scope에서 해당 scopeName의 Contexts 중에서 해당하는 Context의 Provider를 생성, 반환합니다.
+만약에 해당하는 Context가 없다면 BaseContext(신규 생성)를 사용합니다.
+`useContext`는 인자로 받은 scope에서 해당 scopeName의 Contexts 중에서 해당하는 Context에 대해 useContext를 호출하여 반환합니다.
+마찬가지로 해당하는 Context가 없다면 BaseContext(신규 생성)를 사용합니다.
+
+---
+
+**createContextScope - createScope**
+
+> `createScope`는 `createContextScope`의 인자로 받은 scopeName을 기반으로 scope의 contexts를 찾아 인자로 받은 `createContextScopeDeps`와 compose하는 hook을 반환하는 함수입니다.
+
+`createScope`는 별도의 인자 없이 scope를 인자로 받는 hook을 반환하는 함수입니다.
+`useScope`(반환되는 hook의 이름)은 인자로 받은 scope에서 해당 scopeName에 해당하는 contexts를
+
+`createScope`에서는 `defaultContexts`를 `createContextScopeDeps`와 합쳐서 `{ [scopeName: string]: React.Context<C>[] }` 형태의 `scope`를 만들어주는 hook을 반환하는 함수입니다.
+
+---
+
+`createContextScope`는 반환할 때 `createScope`를 반환하는데 만약 `createContextScopeDeps`가 있다면 `createScope`를 `composeContextScopes`를 통해 합쳐서 반환합니다.
+`composeContextScopes`는 인자로 받은 배열을 순회하면서 `{ [`\_\_scope${baseScope.scopeName}`]: composedScopes }`와 같이 scope를 baseScope 반환합니다.
+baseScope는 인자로 받은 배열의 첫 번째 Scope로 호출부를 참고 하면 현재 `createContextScope`의 `createScope`를 의미합니다.
+
+```ts
+function createContextScope(...) {
+  ...
+
+  return [createContext, composeContextScopes(createScope, ...createContextScopeDeps)] as const;
+}
+```
+
+---
+
+처음 보면 코드 자체로 이해하기 쉽지 않아서 위 예시 `<Opener />`, `<AlertOpener />` 컴포넌트를 이용해서 확인해보겠습니다.
+
+```tsx
+const OPENER_NAME = 'Opener';
+
+const [createOpenerContext, createOpenerScope] = createContextScope(OPENER_NAME);
+
+interface OpenerContextValue {
+  open: boolean;
+  setOpen: React.Dispatch<React.SetStateAction<boolean>>;
+}
+const [OpenerProvider, useOpenerContext] = createOpenerContext<OpenerContextValue>(OPENER_NAME);
+```
+
+`defaultContext`를 인자로 주지 않았기 때문에 `defaultContexts`는 비어있는 배열 상태입니다.
+
+```ts
+defaultContexts = [];
+```
+
+`<Opener />`는 `__scopeOpener` scope를 인자로 받아 `OpenerProvider`에게 전달합니다.
+
+이 때 `__scopeOpener` 모습은 다음과 같습니다.
+
+```ts
+__scopeOpener = {
+  Opener: [BaseContext],
+};
+```
+
+```tsx
+const Opener: React.FC<OpenerProps> = ({
+  __scopeOpener,
+  className,
+  children,
+}: ScopedProps<OpenerProps>) => {
+  const [open, setOpen] = React.useState(false);
+
+  return (
+    <OpenerProvider scope={__scopeOpener} open={open} setOpen={setOpen}>
+      <div>{children}</div>
+    </OpenerProvider>
+  );
+};
+```
+
+만약 `__scopeOpener`가 들어온다면 `OpenerProvider`는 해당 scope에서 scopeName(`OPENER_NAME`) Context를 찾아서 Provider를 생성합니다.
+그렇지 않다면 신규 Context(BaseContext)를 생성하여 Provider를 생성합니다.
+
+`defaultContexts`에는 아직 아무것도 없기 때문에 신규 Context(BaseContext)를 사용합니다.
+
+```ts
+const { scope } = props;
+const Context = scope?.[scopeName][index] || BaseContext;
+```
+
+`<OpenerTrigger />`는 `__scopeOpener` scope를 인자로 받아 `useOpenerContext`를 사용해 context를 가져옵니다.
+
+```tsx
+const OpenerTrigger: React.FC<OpenerProps> = ({
+  __scopeOpener,
+  className,
+  children,
+}: ScopedProps<OpenerProps>) => {
+  const { setOpen } = useOpenerContext(TRIGGER_NAME, __scopeOpener);
+
+  return <button onClick={() => setOpen((prev) => !prev)}>{children}</button>;
+};
+```
+
+만약 `__scopeOpener`가 들어온다면 `useOpenerContext`는 해당 scope에서 scopeName(`OPENER_NAME`) Context를 찾아서 useContext를 호출하여 context를 반환합니다.
+그렇지 않다면 신규 Context(BaseContext)를 생성하여 useContext를 호출하여 context를 반환합니다.
+
+`defaultContexts`에는 아직 아무것도 없기 때문에 신규 Context(BaseContext)를 사용합니다.
+
+```ts
+const Context = scope?.[scopeName][index] || BaseContext;
+const context = React.useContext(Context);
+```
+
+`<AlertOpener />`를 `<Opener />`를 확장하여 만들어보겠습니다.
+
+`<Opener />`에서는 `createOpenerScope`를 export합니다.
+
+```ts
+// Opener.tsx
+const [createOpenerContext, createOpenerScope] = createContextScope(OPENER_NAME);
+
+export { createOpenerScope };
+```
+
+`<AlertOpener />`에서는 `createOpenerScope`를 인자로 넣어 `createContextScope`를 호출합니다.
+그리고 `createOpenerScope`를 호출하여 `<Opener />`의 scope(`{ __scopeOpener: { Opener: [...contexts] } }`)를 가져올 수 있는 `useOpenerScope`를 만듭니다.
+
+```ts
+const [createAlertOpenerContext, createAlertOpenerScope] = createContextScope(ALERTOPENER_NAME, [
+  createOpenerScope,
+]);
+
+const useOpenerScope = createOpenerScope();
+
+const AlertOpener: React.FC<AlertOpenerProps> = ({
+  __scopeAlertOpener,
+  ...props
+}: ScopedProps<AlertOpenerProps>) => {
+  const openerScope = useOpenerScope(__scopeAlertOpener);
+  return <Opener.Root {...openerScope} {...props} />;
+};
+```
+
+`<AlertOpener />`도 마찬가지로 확장되어 사용하는 것을 염두해 두고 `__scopeAlertOpener` scope를 prop으로 받아 `useOpenerScope`를 호출합니다.
+
+이 때 `__scopeAlertOpener`를 인자로 받은 `useOpenerScope`는 baseScope(`Opener`)를 기준으로 scope를 compose하여 반환합니다.
+
+```ts
+openerScope = {
+  __scopeOpener: {
+    ...{ Opener: [...] },
+    ...{ AlertOpener: [...] }
+  }
+}
+```
+
+이를 통해 `<AlertOpener />`에서 `<Opener />`와 함께 사용 의도한 context를 가져와서 사용할 수 있습니다.
+
+```tsx
+const AlertOpenerTrigger: React.FC<AlertOpenerTriggerProps> = ({
+  __scopeAlertOpener,
+  ...props
+}: ScopedProps<AlertOpenerTriggerProps>) => {
+  const openerScope = useOpenerScope(__scopeAlertOpener);
+  return <Opener.Trigger {...openerScope} {...props} />;
+};
+```
+
+`<AlertOpenerTrigger />`에서 `useOpenerScope`를 사용하여 scope를 `<Opener.Trigger />` prop으로 전달합니다.
+
+`<Opener.Trigger />`에서는 위에도 작성되어 있지만 scope 인자를 받아 `useOpenerContext`를 사용하여 context를 가져옵니다.
+scope가 존재하고 scope내에 `Opener`가 있기 때문에 해당 scope의 context를 사용합니다.
+
+![good-case-create-context-scope](./docs/images/good-case-create-context-scope.png)
+
+사실 consumer가 scope를 기반으로 context를 선택하고 가져오기 때문에 `consumer는 가장 가까운 Provider의 Context를 가져온다`라는 원칙을 따르지 않고 있습니다.
+하지만 compound component로 구성된 컴포넌트의 경우 위와 같은 case가 더 복잡한 형태로 많이 발생합니다. 그런 경우 이 방법이 좋은 해답이 될 수 있을 것 같단 생각이 들게 됩니다.
+
+## 결론
+
+radix-ui의 `createContextScope`는 리액트 Context API의 `consumer는 가장 가까운 Provider의 Context를 가져온다`라는 원칙을 따르지 않고,
+`consumer는 scope를 기반으로 context를 선택하고 가져온다`라는 원칙을 사용했다는 것입니다.
+해결 방법을 찾아가는 과정에서 해결법이 크게 다르진 않았지만 좀 더 확장성 있고 안전한 해결법이었습니다.
+
+중첩된 다중 Context를 사용할 때 발생할 수 있는 문제를 경험하고 이를 해결하기 위해 여러가지 방법을 찾은 결과를 정리해 보았습니다.
+정확하게 문제를 파악했는지, 문제 해결방법을 잘 이해했는지는 잘 모르겠지만 몇 가지라도 도움이 되었으면 좋겠습니다.
+저는 주로 이런 라이브러리를 가져다 쓸 줄만 알았지만 어떤 원리로 동작하고 해결하는지 알아보진 못했습니다.
+이번 기회에 시간이 좀 걸렸지만 좋은 해결 방법을 확인할 수 있어서 좋았습니다.
