@@ -1,5 +1,6 @@
 # practice-complex-context
 
-Complex Context APIs
+> Complex Context APIs
 
-https://www.seonest.net/posts/react/complex-context-apis
+- site: https://practice-complex-context.vercel.app/
+- blog: https://www.seonest.net/posts/react/complex-context-apis
